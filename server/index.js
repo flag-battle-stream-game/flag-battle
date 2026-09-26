@@ -48,8 +48,8 @@ bus.on('chat', (msg) => {
   }
 });
 
-bus.on('vote', ({ code }) => {
-  voteTally[code] = (voteTally[code] || 0) + 1;
+bus.on('vote', ({ code, weight }) => {
+  voteTally[code] = (voteTally[code] || 0) + (weight || 1);
 });
 
 // ---- SSE: GET /api/chat-stream ----

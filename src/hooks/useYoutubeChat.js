@@ -37,7 +37,10 @@ export function useYoutubeChat({ onMessage, onVoteTally } = {}) {
 
       if (msg.vote?.code) {
         const tally = { ...tallyRef.current };
-        tally[msg.vote.code] = (tally[msg.vote.code] || 0) + 1;
+        // Super Chat votes carry a `weight` (proportional to the amount
+        // paid, computed server-side — see server/youtubeChat.js); a free
+        // chat vote defaults to 1.
+        tally[msg.vote.code] = (tally[msg.vote.code] || 0) + (msg.vote.weight || 1);
         tallyRef.current = tally;
         onVoteTally?.(tally);
       }

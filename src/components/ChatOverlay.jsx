@@ -24,12 +24,27 @@ export default function ChatOverlay({ messages }) {
           <div className="text-[10px] text-text-soft/40 italic">Waiting for chat…</div>
         )}
         {messages.map((m) => (
-          <div key={m.id} className="text-[10px] leading-snug animate-[elim-in_0.35s_ease_forwards] opacity-0" style={{ animationFillMode: 'forwards' }}>
-            <span className="text-accent-gold font-bold">{m.author}: </span>
+          <div
+            key={m.id}
+            className={
+              'text-[10px] leading-snug animate-[elim-in_0.35s_ease_forwards] opacity-0 ' +
+              (m.superChat
+                ? 'bg-accent-pink/15 border border-accent-pink/40 rounded px-1.5 py-1 -mx-0.5'
+                : '')
+            }
+            style={{ animationFillMode: 'forwards' }}
+          >
+            {m.superChat && (
+              <span className="mr-1 inline-block bg-accent-pink text-white text-[8px] font-bold tracking-wide px-1 py-[1px] rounded align-middle">
+                ★ {m.superChat.amountDisplayString || 'SUPER CHAT'}
+              </span>
+            )}
+            <span className={m.superChat ? 'text-accent-pink font-bold' : 'text-accent-gold font-bold'}>{m.author}: </span>
             <span className="text-text-soft/90">{m.text}</span>
             {m.vote && (
               <span className="ml-1 inline-block bg-accent-crimson text-white text-[8px] font-bold tracking-wide px-1 py-[1px] rounded align-middle">
                 VOTE · {m.vote.countryName}
+                {m.vote.weight > 1 ? ` ×${m.vote.weight}` : ''}
               </span>
             )}
           </div>

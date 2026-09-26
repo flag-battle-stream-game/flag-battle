@@ -1,7 +1,16 @@
 // Polls the YouTube Data API v3 for live chat messages and turns them into
 // two kinds of events, emitted through the given EventEmitter-like `bus`:
-//   bus.emit('chat', { id, author, text, timestamp, vote })
-//   bus.emit('vote', { code, countryName })       (only for recognized votes)
+//   bus.emit('chat', { id, author, text, timestamp, vote, superChat })
+//   bus.emit('vote', { code, countryName, weight, superChat })
+//     (only for recognized votes — `weight` is 1 for a normal chat message,
+//     and proportional to the amount paid for a Super Chat: see
+//     `superChatWeight` below.)
+//
+// Super Chats (paid messages) carry `snippet.type === 'superChatEvent'` and
+// a `snippet.superChatDetails` object with the amount and the commenter's
+// text (in `userComment`, not `displayMessage`). We treat a `!vote` inside
+// a Super Chat's comment as a much stronger vote than a free chat message,
+// so paying viewers can meaningfully swing the round.
 //
 // Uses only Node's built-in fetch (Node 18+) — no extra HTTP client.
 import { COUNTRY_CODES, COUNTRY_NAMES } from '../src/data/countries.js';
@@ -38,6 +47,21 @@ function parseVote(text) {
     if (code) return { code, countryName: COUNTRY_NAMES[code] || code };
   }
   return null;
+}
+
+// How many "votes" one Super Chat is worth, proportional to the amount
+// paid. `amountMicros` is the payment in micro-units of its currency
+// (1,000,000 micros = 1 unit, e.g. 1 USD or 1 EUR) — we don't do currency
+// conversion here, so this is "1 vote per whole currency unit paid", with a
+// floor of MIN_SUPERCHAT_WEIGHT so even a small Super Chat clearly outweighs
+// a free chat vote. Tune SUPERCHAT_VOTES_PER_UNIT via env if a channel's
+// typical currency/amounts call for a different ratio.
+const SUPERCHAT_VOTES_PER_UNIT = Number(process.env.SUPERCHAT_VOTES_PER_UNIT) || 10;
+const MIN_SUPERCHAT_WEIGHT = 10;
+
+function superChatWeight(amountMicros) {
+  const units = (amountMicros || 0) / 1_000_000;
+  return Math.max(MIN_SUPERCHAT_WEIGHT, Math.round(units * SUPERCHAT_VOTES_PER_UNIT));
 }
 
 async function ytFetch(path, params) {
@@ -121,15 +145,41 @@ export function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, l
       pageToken = data.nextPageToken;
 
       for (const item of data.items || []) {
-        const text = item.snippet?.displayMessage || '';
         const author = item.authorDetails?.displayName || 'unknown';
-        const vote = parseVote(text);
+        const isSuperChat = item.snippet?.type === 'superChatEvent';
+        const scDetails = item.snippet?.superChatDetails;
+
+        // A Super Chat's actual comment lives in `userComment`, not
+        // `displayMessage` (which YouTube leaves blank for these).
+        const text = isSuperChat
+          ? (scDetails?.userComment || '')
+          : (item.snippet?.displayMessage || '');
+
+        const rawVote = parseVote(text);
+        const superChat = isSuperChat
+          ? {
+              amountMicros: scDetails?.amountMicros ? Number(scDetails.amountMicros) : 0,
+              currency: scDetails?.currency || '',
+              amountDisplayString: scDetails?.amountDisplayString || '',
+              tier: scDetails?.tier ?? null,
+            }
+          : null;
+
+        const vote = rawVote
+          ? {
+              ...rawVote,
+              weight: superChat ? superChatWeight(superChat.amountMicros) : 1,
+              superChat: Boolean(superChat),
+            }
+          : null;
+
         const chatMessage = {
           id: item.id,
           author,
           text,
           timestamp: item.snippet?.publishedAt || new Date().toISOString(),
           vote,
+          superChat,
         };
         bus.emit('chat', chatMessage);
         if (vote) bus.emit('vote', vote);
