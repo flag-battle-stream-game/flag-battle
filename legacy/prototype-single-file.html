@@ -1,0 +1,1294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Flag Battle — Prototype</title>
+<style>
+  :root {
+    --bg-deep: #0a0f1c;
+    --bg-mid: #17233b;
+    --accent-gold: #e8b23d;
+    --accent-crimson: #c13f3f;
+    --accent-pink: #ff3d68;
+    --ring: #3e5c76;
+    --text-soft: #f0ebd8;
+  }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    font-family: Georgia, 'Iowan Old Style', serif;
+    color: var(--text-soft);
+  }
+  body { display: flex; flex-direction: column; position: relative; }
+
+  /* ---- Stadium-style backdrop (pure CSS — no external images) ---- */
+  body::before {
+    content: ''; position: fixed; inset: 0; z-index: -2;
+    background:
+      /* full-height side color washes — warm on the left, cool on the
+         right — like colored floodlights sweeping across the stands */
+      linear-gradient(90deg, rgba(255,120,60,0.16) 0%, transparent 20%, transparent 80%, rgba(80,160,255,0.16) 100%),
+      /* corner + roof floodlight beams */
+      radial-gradient(ellipse 60% 42% at 6% 0%, rgba(255,200,140,0.24) 0%, transparent 62%),
+      radial-gradient(ellipse 60% 42% at 94% 0%, rgba(130,190,255,0.24) 0%, transparent 62%),
+      radial-gradient(ellipse 50% 36% at 50% 0%, rgba(255,255,255,0.18) 0%, transparent 60%),
+      radial-gradient(ellipse 55% 40% at 0% 100%, rgba(130,190,255,0.16) 0%, transparent 62%),
+      radial-gradient(ellipse 55% 40% at 100% 100%, rgba(255,150,110,0.16) 0%, transparent 62%),
+      linear-gradient(180deg, #0c1424 0%, #0a0f1c 45%, #060911 100%);
+  }
+  body::after {
+    /* stadium-stand seating rows along the top and bottom edges (masked out
+       in the middle where the arena content sits), scattered crowd-light
+       sparkle, plus a strong dark vignette framing the whole screen — like
+       looking into a lit arena bowl from up in the stands */
+    content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background:
+      repeating-linear-gradient(180deg, rgba(255,255,255,0.07) 0 3px, rgba(0,0,0,0.12) 3px 15px),
+      radial-gradient(circle at 12% 8%, rgba(255,255,255,0.5) 0 1px, transparent 1px),
+      radial-gradient(circle at 27% 4%, rgba(255,220,160,0.4) 0 1px, transparent 1px),
+      radial-gradient(circle at 41% 9%, rgba(255,255,255,0.4) 0 1px, transparent 1px),
+      radial-gradient(circle at 63% 5%, rgba(160,210,255,0.4) 0 1px, transparent 1px),
+      radial-gradient(circle at 78% 9%, rgba(255,255,255,0.45) 0 1px, transparent 1px),
+      radial-gradient(circle at 90% 4%, rgba(255,220,160,0.4) 0 1px, transparent 1px),
+      radial-gradient(circle at 18% 93%, rgba(255,255,255,0.35) 0 1px, transparent 1px),
+      radial-gradient(circle at 55% 96%, rgba(160,210,255,0.35) 0 1px, transparent 1px),
+      radial-gradient(circle at 84% 92%, rgba(255,220,160,0.35) 0 1px, transparent 1px),
+      radial-gradient(ellipse 125% 105% at 50% 50%, transparent 48%, rgba(0,0,0,0.62) 100%);
+    background-size: 100% 100%, 60px 60px, 60px 60px, 60px 60px, 60px 60px, 60px 60px, 60px 60px, 60px 60px, 60px 60px, 60px 60px, 100% 100%;
+    -webkit-mask-image: linear-gradient(180deg, black 0%, black 15%, transparent 28%, transparent 72%, black 85%, black 100%);
+            mask-image: linear-gradient(180deg, black 0%, black 15%, transparent 28%, transparent 72%, black 85%, black 100%);
+  }
+
+  #arena-canvas { position: absolute; top: 0; left: 0; display: block; }
+  .arena-wrap { position: relative; flex: 1 1 auto; min-height: 0; }
+
+  /* ---- Header ---- */
+  .header-bar { position: relative; flex: 0 0 auto; text-align: center; padding: 10px 0 4px; }
+  .header-bar h1 {
+    margin: 0; font-size: 26px; letter-spacing: 1px; font-weight: 700;
+    text-transform: uppercase; color: var(--text-soft);
+    text-shadow: 0 2px 10px rgba(0,0,0,0.6);
+  }
+  .header-bar h1 .accent { color: var(--accent-gold); }
+  .header-bar .tagline {
+    margin: 2px 0 0; font-size: 9px; letter-spacing: 3px; text-transform: uppercase;
+    color: rgba(240,235,216,0.6);
+  }
+  .live-badge {
+    position: absolute; top: 10px; right: 14px;
+    background: var(--accent-crimson); color: #fff;
+    font-size: 9px; font-weight: 700; letter-spacing: 1px;
+    padding: 3px 8px; border-radius: 3px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .live-badge .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: #fff;
+    animation: live-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes live-pulse { 0%,100%{ opacity: 1; } 50%{ opacity: 0.25; } }
+
+  .controls { position: absolute; top: 10px; left: 14px; display: flex; gap: 6px; z-index: 10; }
+  .controls button {
+    background: rgba(232, 178, 61, 0.12); border: 1px solid var(--accent-gold);
+    color: var(--accent-gold); padding: 5px 10px; border-radius: 4px;
+    font-family: inherit; font-size: 10px; cursor: pointer;
+  }
+  .controls button:hover { background: rgba(232, 178, 61, 0.25); }
+
+  /* ---- Qualified-for-final panel (persistent, shows the running list) ---- */
+  .qualified-panel {
+    flex: 0 0 auto; margin: 4px 16px 0; padding: 6px 14px 8px;
+    background: rgba(10, 15, 28, 0.6);
+    border: 1px solid rgba(232, 178, 61, 0.3); border-radius: 6px;
+  }
+  .qp-title {
+    font-size: 10px; letter-spacing: 1.3px; text-transform: uppercase;
+    color: var(--accent-gold); text-align: center; margin-bottom: 4px;
+  }
+  .qp-row {
+    height: 17px; display: flex; align-items: center; gap: 7px;
+    font-size: 10px; color: var(--text-soft);
+  }
+  .qp-row + .qp-row { margin-top: 2px; }
+  .qp-index { flex: 0 0 auto; width: 24px; color: rgba(240,235,216,0.5); }
+  .qp-flag-mini { flex: 0 0 auto; border-radius: 1px; display: block; }
+  .qp-country { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .qp-check { flex: 0 0 auto; color: #5fd68a; font-size: 9px; letter-spacing: 0.5px; }
+
+  /* ---- Round / timer line ---- */
+  .round-info {
+    flex: 0 0 auto; text-align: center; padding: 6px 0 2px;
+    font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: rgba(240,235,216,0.75);
+  }
+  .round-info .sep { color: rgba(240,235,216,0.3); margin: 0 6px; }
+  .round-info .timer { color: #6cc3ff; font-variant-numeric: tabular-nums; }
+
+  /* ---- Progress bar ---- */
+  .progress-section { flex: 0 0 auto; padding: 6px 20px 4px; text-align: center; }
+  .progress-track {
+    height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1);
+    overflow: hidden; margin: 0 auto 6px; max-width: 640px;
+  }
+  .progress-fill {
+    height: 100%; background: linear-gradient(90deg, #6cc3ff, #3e8ef0);
+    border-radius: 3px; transition: width 0.25s ease;
+  }
+  .progress-count { font-size: 13px; letter-spacing: 1px; }
+  .progress-count span { color: #6cc3ff; font-weight: 700; }
+  .progress-sub { font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: rgba(240,235,216,0.45); margin-top: 1px; }
+
+  /* ---- Winner overlay (centered on the arena, like before) ---- */
+  .winner-banner {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.85);
+    background: rgba(10, 15, 28, 0.92);
+    border: 2px solid var(--accent-gold); border-radius: 7px;
+    padding: 12px 24px; text-align: center;
+    opacity: 0; transition: opacity 0.6s ease, transform 0.6s ease;
+    pointer-events: none; z-index: 20;
+  }
+  .winner-banner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .winner-banner p { margin: 0; color: var(--text-soft); font-size: 10px; letter-spacing: 1.3px; text-transform: uppercase; opacity: 0.7; }
+  .winner-banner h1 { margin: 5px 0 0 0; color: var(--accent-gold); font-size: 17px; font-weight: 400; max-width: 220px; }
+  .winner-flag-canvas {
+    display: block; margin: 8px auto 0;
+    border: 2px solid var(--accent-gold); border-radius: 3px;
+    box-shadow: 0 0 14px rgba(232,178,61,0.55), 0 3px 8px rgba(0,0,0,0.5);
+  }
+
+  /* ---- Stage-complete announcement (bigger, appears between stages) ---- */
+  .stage-announcement {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.8);
+    background: rgba(10, 15, 28, 0.95);
+    border: 2px solid var(--accent-pink); border-radius: 10px;
+    padding: 26px 44px; text-align: center;
+    opacity: 0; transition: opacity 0.5s ease, transform 0.5s ease;
+    pointer-events: none; z-index: 21;
+  }
+  .stage-announcement.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .stage-announcement h1 {
+    margin: 0; color: var(--accent-pink); font-size: 28px; font-weight: 700;
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+  .stage-announcement p {
+    margin: 8px 0 0; color: var(--text-soft); font-size: 13px;
+    letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.8;
+  }
+
+  /* ---- Eliminated strip ---- */
+  .eliminated-bar {
+    position: relative; flex: 0 0 auto; width: 100%;
+    height: 90px; overflow: hidden; box-sizing: border-box;
+    background: rgba(6, 9, 17, 0.55);
+    border-top: 1px solid rgba(232, 178, 61, 0.2);
+    z-index: 15;
+  }
+  .eliminated-label {
+    position: absolute; top: 0; left: 0; bottom: 0; width: 62px;
+    padding: 7px 8px 0; color: var(--accent-crimson);
+    font-size: 9px; letter-spacing: 1px; text-transform: uppercase;
+    border-right: 1px solid rgba(232, 178, 61, 0.15);
+    box-sizing: border-box;
+  }
+  .eliminated-track-wrap {
+    position: absolute; top: 0; left: 62px; right: 0; bottom: 0;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    touch-action: pan-y; overscroll-behavior: contain;
+    box-sizing: border-box; padding: 6px 10px;
+  }
+  .eliminated-track { display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; }
+  .eliminated-item {
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    opacity: 0; transform: translateY(8px) scale(0.7);
+    animation: elim-in 0.35s ease forwards;
+  }
+  @keyframes elim-in { to { opacity: 1; transform: translateY(0) scale(1); } }
+  .eliminated-item .swatch {
+    width: 16px; height: 11px; border-radius: 2px; overflow: hidden;
+    display: flex; box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
+  .eliminated-item .swatch > div { flex: 1; height: 100%; }
+  .eliminated-item .code { font-size: 6px; color: rgba(240,235,216,0.45); letter-spacing: 0.3px; }
+
+  /* ---- Footer ---- */
+  .footer-bar {
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+    gap: 14px; padding: 6px 0 10px; color: rgba(240,235,216,0.55);
+    font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+  }
+  .footer-bar svg { display: block; }
+  .footer-bar .trophy { color: var(--accent-gold); }
+</style>
+</head>
+<body>
+  <div class="header-bar">
+    <div class="controls">
+      <button id="btn-reset">New Round</button>
+      <button id="btn-shrink">Shrink Arena</button>
+      <button id="btn-sound">Sound: On</button>
+    </div>
+    <div class="live-badge"><span class="dot"></span>LIVE</div>
+    <h1><span id="flag-count-title">178</span> FLAGS <span class="accent">BATTLE</span></h1>
+    <p class="tagline">One World ★ One Champion</p>
+  </div>
+
+  <div class="qualified-panel" id="qualified-panel">
+    <div class="qp-title" id="qp-title">Qualified for Round of 32</div>
+    <div id="qualified-list"></div>
+  </div>
+
+  <div class="round-info">
+    <span id="round-number">ROUND 1</span><span class="sep">·</span><span id="round-phase">QUALIFYING</span><span class="sep">·</span><span class="timer" id="round-timer">00:00</span>
+  </div>
+
+  <div class="arena-wrap" id="arena-wrap">
+    <canvas id="arena-canvas"></canvas>
+    <div class="winner-banner" id="winner-banner">
+      <p id="winner-label">Qualified</p>
+      <h1 id="winner-name">—</h1>
+      <canvas class="winner-flag-canvas" id="winner-canvas" width="100" height="64"></canvas>
+    </div>
+    <div class="stage-announcement" id="stage-announcement">
+      <h1 id="stage-announce-title">32 QUALIFIED</h1>
+      <p id="stage-announce-sub">Advancing to Round of 32</p>
+    </div>
+  </div>
+
+  <div class="progress-section">
+    <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:100%"></div></div>
+    <div class="progress-count"><span id="count">0</span> / <span id="count-total">0</span> FLAGS REMAINING</div>
+    <div class="progress-sub"><span id="count-total-2">0</span> FLAGS · ONE FINAL PLACE</div>
+  </div>
+
+  <div class="eliminated-bar">
+    <div class="eliminated-label">Eliminated</div>
+    <div class="eliminated-track-wrap">
+      <div class="eliminated-track" id="eliminated-track"></div>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 3l2 6h6l-5 4 2 6-5-4-5 4 2-6-5-4h6z" fill="currentColor" stroke="none"/></svg>
+    <span>One World</span>
+    <svg class="trophy" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 3h12v2h2.5a1 1 0 0 1 1 1c0 3-1.8 5.2-4.3 5.7A6 6 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A6 6 0 0 1 6.8 11.7C4.3 11.2 2.5 9 2.5 6a1 1 0 0 1 1-1H6V3zm0 4H4.6c.3 1.6 1.3 2.7 2.6 3.1A8 8 0 0 1 6 7zm12 0a8 8 0 0 1-.6 3.1c1.3-.4 2.3-1.5 2.6-3.1H18z"/></svg>
+    <span>One Champion</span>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 3l2 6h6l-5 4 2 6-5-4-5 4 2-6-5-4h6z" fill="currentColor" stroke="none"/></svg>
+  </div>
+
+<script>
+(function () {
+  let STAGE_W = window.innerWidth, STAGE_H = window.innerHeight;
+  let CENTER = { x: STAGE_W / 2, y: STAGE_H / 2 };
+  let ARENA_RADIUS = 460; // recomputed to fit arena-wrap — see resizeCanvas()
+
+  const GATES = [
+    { angle: Math.PI / 2, half: 0.26 },
+  ];
+  const GATE_SPIN = 0.0035; // radians/frame — the gate slowly travels around the ring
+
+  // The rotating blue "shield" — travels around the ring independently of
+  // the gates. Whenever it sweeps over a gate, that gate is temporarily
+  // sealed: no flag can exit through it until the shield moves past.
+  const BLOCKER = { angle: rand(0, Math.PI * 2), half: 0.34, speed: 0.006 };
+
+  const canvas = document.getElementById('arena-canvas');
+  const ctx = canvas.getContext('2d');
+  const arenaWrap = document.getElementById('arena-wrap');
+  const headerBar = document.querySelector('.header-bar');
+  const qualifiedPanel = document.querySelector('.qualified-panel');
+  const roundInfo = document.querySelector('.round-info');
+  const progressSection = document.querySelector('.progress-section');
+  const footerBar = document.querySelector('.footer-bar');
+  const eliminatedBarEl = document.querySelector('.eliminated-bar');
+  const eliminatedTrack = document.getElementById('eliminated-track');
+
+  // ---- Sound (synthesized with Web Audio API — no audio files needed) ----
+  let soundEnabled = true;
+  let audioCtx = null;
+  let ambienceGain = null;
+  let ambienceStarted = false;
+
+  function ensureAudio() {
+    if (!audioCtx) {
+      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioCtxClass();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function startCrowdAmbience() {
+    if (ambienceStarted) return;
+    ambienceStarted = true;
+    const c = ensureAudio();
+    const bufferSize = c.sampleRate * 2;
+    const buffer = c.createBuffer(1, bufferSize, c.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const src = c.createBufferSource();
+    src.buffer = buffer; src.loop = true;
+    // Two cascaded lowpass stages, cutting off the high end entirely —
+    // a plain bandpass on white noise sounds like radio static ("fâșâit");
+    // this keeps only the low rumble, more like a distant crowd murmur.
+    const filter1 = c.createBiquadFilter();
+    filter1.type = 'lowpass'; filter1.frequency.value = 380; filter1.Q.value = 0.3;
+    const filter2 = c.createBiquadFilter();
+    filter2.type = 'lowpass'; filter2.frequency.value = 220; filter2.Q.value = 0.3;
+    ambienceGain = c.createGain();
+    ambienceGain.gain.value = soundEnabled ? 0.05 : 0;
+    src.connect(filter1); filter1.connect(filter2); filter2.connect(ambienceGain); ambienceGain.connect(c.destination);
+    src.start();
+  }
+
+  function playTone(freq, duration, type, delay, peak) {
+    if (!soundEnabled) return;
+    const c = ensureAudio();
+    const t0 = c.currentTime + (delay || 0);
+    const osc = c.createOscillator();
+    const gain = c.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(peak || 0.14, t0 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+    osc.connect(gain); gain.connect(c.destination);
+    osc.start(t0); osc.stop(t0 + duration + 0.05);
+  }
+
+  function playQualifyChime() {
+    playTone(660, 0.12, 'triangle', 0, 0.10);
+    playTone(880, 0.16, 'triangle', 0.1, 0.10);
+  }
+  function playStageFanfare() {
+    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => playTone(f, 0.28, 'triangle', i * 0.12, 0.13));
+  }
+  function playChampionFanfare() {
+    [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => playTone(f, 0.4, 'sawtooth', i * 0.1, 0.1));
+  }
+  function playWhoosh() {
+    if (!soundEnabled) return;
+    const c = ensureAudio();
+    const bufferSize = Math.floor(c.sampleRate * 0.22);
+    const buffer = c.createBuffer(1, bufferSize, c.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    const src = c.createBufferSource();
+    src.buffer = buffer;
+    const filter = c.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1100, c.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(280, c.currentTime + 0.22);
+    const gain = c.createGain();
+    gain.gain.setValueAtTime(0.06, c.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.22);
+    src.connect(filter); filter.connect(gain); gain.connect(c.destination);
+    src.start();
+  }
+
+  // Percussive "tam" — a flag bouncing off the arena wall. Throttled so a
+  // busy moment with many flags hitting at once sounds like a rolling
+  // "tam tam tam tam" instead of a wall of overlapping noise.
+  let lastThumpTime = 0;
+  function playThump() {
+    if (!soundEnabled) return;
+    const c = ensureAudio();
+    const now = c.currentTime;
+    if (now - lastThumpTime < 0.05) return;
+    lastThumpTime = now;
+    const osc = c.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(190, now);
+    osc.frequency.exponentialRampToValueAtTime(55, now + 0.09);
+    const gain = c.createGain();
+    gain.gain.setValueAtTime(0.18, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+    osc.connect(gain); gain.connect(c.destination);
+    osc.start(now); osc.stop(now + 0.12);
+  }
+
+  // Spoken champion announcement via the browser's built-in text-to-speech
+  // (Web Speech API) — no audio files needed.
+  function speakChampion(name) {
+    if (!soundEnabled) return;
+    if (!('speechSynthesis' in window)) return;
+    try {
+      window.speechSynthesis.resume(); // some browsers leave it paused/stuck
+      window.speechSynthesis.cancel(); // clear anything queued
+      const utter = new SpeechSynthesisUtterance('The winner is ' + name + '! Congratulations!');
+      utter.rate = 0.95;
+      utter.pitch = 1.05;
+      utter.volume = 1;
+      window.speechSynthesis.speak(utter);
+    } catch (e) { /* speech synthesis unsupported or blocked — ignore */ }
+  }
+
+  // ---- Color shorthand ----
+  const C = {
+    RED:'#c8102e', RED2:'#a41e34', WHITE:'#ffffff', BLUE:'#0033a0', DBLUE:'#00247d',
+    SKY:'#6cace4', GREEN:'#007a3d', DGREEN:'#046a38', YELLOW:'#ffcd00', GOLD:'#ffb81c',
+    BLACK:'#15141a', ORANGE:'#ff7900', MAROON:'#7a1f2b', PURPLE:'#5b2a86', TEAL:'#0f8b8d'
+  };
+
+  // ---- Simplified real flag designs (patterns + accurate-ish colors).
+  // Complex emblems/seals are omitted for legibility at small size, but the
+  // colors and layout family (stripes, cross, canton, etc.) are real. ----
+  const FLAG_DESIGNS = {
+    DE:{type:'h3',c:[C.BLACK,C.RED,C.GOLD]}, NL:{type:'h3',c:[C.RED,C.WHITE,C.DBLUE]},
+    BE:{type:'v3',c:[C.BLACK,C.YELLOW,C.RED]}, FR:{type:'v3',c:[C.BLUE,C.WHITE,C.RED]},
+    IT:{type:'v3',c:[C.GREEN,C.WHITE,C.RED]}, RO:{type:'v3',c:[C.BLUE,C.YELLOW,C.RED]},
+    MD:{type:'v3',c:[C.BLUE,C.YELLOW,C.RED]}, IE:{type:'v3',c:[C.GREEN,C.WHITE,C.ORANGE]},
+    CI:{type:'v3',c:[C.ORANGE,C.WHITE,C.GREEN]}, NG:{type:'v3',c:[C.GREEN,C.WHITE,C.GREEN]},
+    ML:{type:'v3',c:[C.GREEN,C.YELLOW,C.RED]}, GN:{type:'v3',c:[C.RED,C.YELLOW,C.GREEN]},
+    SN:{type:'v3',c:[C.GREEN,C.YELLOW,C.RED]}, CM:{type:'v3',c:[C.GREEN,C.RED,C.YELLOW]},
+    TD:{type:'v3',c:[C.BLUE,C.YELLOW,C.RED]}, GA:{type:'h3',c:[C.GREEN,C.YELLOW,C.BLUE]},
+    CG:{type:'v3',c:[C.GREEN,C.YELLOW,C.RED]}, LT:{type:'h3',c:[C.YELLOW,C.GREEN,C.RED]},
+    LV:{type:'h3',c:[C.MAROON,C.WHITE,C.MAROON]}, EE:{type:'h3',c:[C.BLUE,C.BLACK,C.WHITE]},
+    RU:{type:'h3',c:[C.WHITE,C.BLUE,C.RED]}, BG:{type:'h3',c:[C.WHITE,C.GREEN,C.RED]},
+    HU:{type:'h3',c:[C.RED,C.WHITE,C.GREEN]}, AT:{type:'h3',c:[C.RED,C.WHITE,C.RED]},
+    PL:{type:'h2',c:[C.WHITE,C.RED]}, MC:{type:'h2',c:[C.RED,C.WHITE]}, ID:{type:'h2',c:[C.RED,C.WHITE]},
+    MY:{type:'h2',c:[C.RED,C.WHITE]}, SG:{type:'h2',c:[C.RED,C.WHITE]}, UA:{type:'h2',c:[C.BLUE,C.YELLOW]},
+    YE:{type:'h3',c:[C.RED,C.WHITE,C.BLACK]}, IQ:{type:'h3',c:[C.RED,C.WHITE,C.BLACK]},
+    EG:{type:'h3',c:[C.RED,C.WHITE,C.BLACK]}, SY:{type:'h3',c:[C.RED,C.WHITE,C.BLACK]},
+    SD:{type:'h3',c:[C.RED,C.WHITE,C.BLACK]}, AE:{type:'h3',c:[C.GREEN,C.WHITE,C.BLACK]},
+    KW:{type:'h3',c:[C.GREEN,C.WHITE,C.RED]}, BH:{type:'h2',c:[C.RED,C.WHITE]},
+    QA:{type:'h2',c:[C.MAROON,C.WHITE]}, SA:{type:'field',c:C.DGREEN},
+    LY:{type:'h3',c:[C.RED,C.BLACK,C.GREEN]}, AM:{type:'h3',c:[C.RED,C.BLUE,C.ORANGE]},
+    LU:{type:'h3',c:[C.RED,C.WHITE,C.SKY]}, AD:{type:'v3',c:[C.BLUE,C.YELLOW,C.RED]},
+    ES:{type:'h3',c:[C.RED,C.YELLOW,C.RED]}, PT:{type:'v2',c:[C.GREEN,C.RED]},
+    GR:{type:'h2',c:[C.BLUE,C.WHITE]}, TR:{type:'circle',bg:C.RED,dot:C.WHITE},
+    CY:{type:'field',c:C.WHITE}, IL:{type:'h3',c:[C.BLUE,C.WHITE,C.BLUE]},
+    JO:{type:'h3',c:[C.BLACK,C.WHITE,C.GREEN]}, PS:{type:'h3',c:[C.BLACK,C.WHITE,C.GREEN]},
+    OM:{type:'h3',c:[C.WHITE,C.RED,C.GREEN]}, IR:{type:'h3',c:[C.GREEN,C.WHITE,C.RED]},
+    AF:{type:'h3',c:[C.BLACK,C.RED,C.GREEN]}, PK:{type:'v2',c:[C.WHITE,C.GREEN]},
+    IN:{type:'h3',c:[C.ORANGE,C.WHITE,C.GREEN]}, BD:{type:'circle',bg:C.GREEN,dot:C.RED},
+    MM:{type:'h3',c:[C.YELLOW,C.GREEN,C.RED]}, TH:{type:'h3',c:[C.RED,C.BLUE,C.RED]},
+    VN:{type:'circle',bg:C.RED,dot:C.YELLOW}, LA:{type:'h3',c:[C.RED,C.BLUE,C.RED]},
+    KH:{type:'h3',c:[C.BLUE,C.RED,C.BLUE]}, PH:{type:'h2',c:[C.BLUE,C.RED]},
+    KR:{type:'circle',bg:C.WHITE,dot:C.RED}, JP:{type:'circle',bg:C.WHITE,dot:C.RED},
+    CN:{type:'field',c:C.RED,accent:C.YELLOW}, MN:{type:'v3',c:[C.RED,C.BLUE,C.RED]},
+    KZ:{type:'field',c:C.SKY,accent:C.GOLD}, UZ:{type:'h3',c:[C.BLUE,C.WHITE,C.GREEN]},
+    TM:{type:'v2',c:[C.RED,C.GREEN]}, KG:{type:'field',c:C.RED,accent:C.YELLOW},
+    TJ:{type:'h3',c:[C.RED,C.WHITE,C.GREEN]}, AZ:{type:'h3',c:[C.BLUE,C.RED,C.GREEN]},
+    GE:{type:'cross',field:C.WHITE,cross:C.RED}, BY:{type:'h2',c:[C.RED,C.GREEN]},
+    RS:{type:'h3',c:[C.RED,C.BLUE,C.WHITE]}, HR:{type:'h3',c:[C.RED,C.WHITE,C.BLUE]},
+    SI:{type:'h3',c:[C.WHITE,C.BLUE,C.RED]}, SK:{type:'h3',c:[C.WHITE,C.BLUE,C.RED]},
+    ME:{type:'field',c:C.RED,accent:C.GOLD}, AL:{type:'field',c:C.RED,accent:C.BLACK},
+    CH:{type:'cross',field:C.RED,cross:C.WHITE}, LI:{type:'h2',c:[C.BLUE,C.RED]},
+    SE:{type:'cross',field:C.BLUE,cross:C.YELLOW}, DK:{type:'cross',field:C.RED,cross:C.WHITE},
+    FI:{type:'cross',field:C.WHITE,cross:C.BLUE},
+    NO:{type:'cross2',field:C.RED,border:C.WHITE,inner:C.BLUE},
+    IS:{type:'cross2',field:C.BLUE,border:C.WHITE,inner:C.RED},
+    CO:{type:'h3',c:[C.YELLOW,C.BLUE,C.RED]}, VE:{type:'h3',c:[C.YELLOW,C.BLUE,C.RED]},
+    EC:{type:'h3',c:[C.YELLOW,C.BLUE,C.RED]}, PE:{type:'v3',c:[C.RED,C.WHITE,C.RED]},
+    BO:{type:'h3',c:[C.RED,C.YELLOW,C.GREEN]}, PY:{type:'h3',c:[C.RED,C.WHITE,C.BLUE]},
+    UY:{type:'h3',c:[C.WHITE,C.BLUE,C.WHITE]}, AR:{type:'h3',c:[C.SKY,C.WHITE,C.SKY]},
+    CL:{type:'quarters',c:[C.BLUE,C.WHITE,C.RED,C.RED]},
+    BR:{type:'diamond',field:C.GREEN,diamond:C.YELLOW,circle:C.BLUE},
+    MX:{type:'v3',c:[C.GREEN,C.WHITE,C.RED]}, CA:{type:'v3',c:[C.RED,C.WHITE,C.RED]},
+    US:{type:'canton',stripe:[C.RED,C.WHITE],canton:C.DBLUE},
+    GB:{type:'cross2',field:C.DBLUE,border:C.RED,inner:C.WHITE},
+    AU:{type:'field',c:C.DBLUE,accent:C.WHITE}, NZ:{type:'field',c:C.DBLUE,accent:C.RED},
+    KE:{type:'h3',c:[C.BLACK,C.RED,C.GREEN]}, ET:{type:'h3',c:[C.GREEN,C.YELLOW,C.RED]},
+    GH:{type:'h3',c:[C.RED,C.YELLOW,C.GREEN]}, UG:{type:'h3',c:[C.BLACK,C.YELLOW,C.RED]},
+    ZM:{type:'field',c:C.GREEN,accent:C.ORANGE}, MA:{type:'field',c:C.RED,accent:C.GREEN},
+    TN:{type:'circle',bg:C.RED,dot:C.WHITE}, DZ:{type:'v2',c:[C.GREEN,C.WHITE]},
+    SO:{type:'field',c:C.SKY,accent:C.WHITE}, BW:{type:'h3',c:[C.SKY,C.BLACK,C.SKY]},
+    MW:{type:'h3',c:[C.BLACK,C.RED,C.GREEN]}, AO:{type:'h2',c:[C.RED,C.BLACK]},
+    GM:{type:'h3',c:[C.RED,C.BLUE,C.GREEN]}, SL:{type:'h3',c:[C.GREEN,C.WHITE,C.BLUE]},
+    LR:{type:'canton',stripe:[C.RED,C.WHITE],canton:C.BLUE}, BF:{type:'h2',c:[C.RED,C.GREEN]},
+    NE:{type:'h3',c:[C.ORANGE,C.WHITE,C.GREEN]}, RW:{type:'h3',c:[C.BLUE,C.YELLOW,C.GREEN]},
+    PA:{type:'quarters',c:[C.WHITE,C.RED,C.BLUE,C.WHITE]},
+  };
+
+  const FALLBACK_PALETTE = [C.RED,C.BLUE,C.GREEN,C.YELLOW,C.WHITE,C.ORANGE,C.BLACK,C.SKY,C.MAROON,C.PURPLE,C.TEAL,C.GOLD];
+  const FALLBACK_TYPES = ['h3','v3','h2','v2'];
+  function hashCode(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  }
+  function fallbackDesign(code) {
+    const h = hashCode(code);
+    const type = FALLBACK_TYPES[h % FALLBACK_TYPES.length];
+    const n = (type === 'h2' || type === 'v2') ? 2 : 3;
+    const c = [];
+    for (let i = 0; i < n; i++) c.push(FALLBACK_PALETTE[(h >> (i * 4)) % FALLBACK_PALETTE.length]);
+    return { type, c };
+  }
+  function designFor(code) { return FLAG_DESIGNS[code] || fallbackDesign(code); }
+
+  function extractSwatchColors(design) {
+    switch (design.type) {
+      case 'h3': case 'v3': case 'h2': case 'v2': case 'quarters': return design.c;
+      case 'cross': return [design.field, design.cross];
+      case 'cross2': return [design.field, design.border, design.inner];
+      case 'circle': return [design.bg, design.dot];
+      case 'canton': return [design.stripe[0], design.stripe[1], design.canton];
+      case 'diamond': return [design.field, design.diamond, design.circle];
+      case 'field': return [design.c, design.accent || design.c];
+      default: return ['#888', '#aaa'];
+    }
+  }
+
+  const COUNTRY_CODES = [
+    'AD','AE','AF','AG','AL','AM','AO','AR','AT','AU','AZ','BA','BB','BD','BE','BF',
+    'BG','BH','BI','BJ','BN','BO','BR','BS','BT','BW','BY','BZ','CA','CD','CF','CG',
+    'CH','CI','CL','CM','CN','CO','CR','CU','CV','CY','CZ','DE','DJ','DK','DM','DO',
+    'DZ','EC','EE','EG','ER','ES','ET','FI','FJ','FM','FR','GA','GB','GD','GE','GH',
+    'GM','GN','GQ','GR','GT','GW','GY','HN','HR','HT','HU','ID','IE','IL','IN','IQ',
+    'IR','IS','IT','JM','JO','JP','KE','KG','KH','KI','KM','KN','KP','KR','KW','KZ',
+    'LA','LB','LC','LI','LK','LR','LS','LT','LU','LV','LY','MA','MC','MD','ME','MG',
+    'MH','MK','ML','MM','MN','MR','MT','MU','MV','MW','MX','MY','MZ','NA','NE','NG',
+    'NI','NL','NO','NP','NR','NZ','OM','PA','PE','PG','PH','PK','PL','PT','PW','PY',
+    'QA','RO','RS','RU','RW','SA','SB','SC','SD','SE','SG','SI','SK','SL','SM','SN',
+    'SO','SR','SS','ST','SV','SY','SZ','TD','TG','TH','TJ','TL','TM','TN','TO','TR',
+    'TT','TV','TZ','UA','UG','US','UY','UZ','VA','VC','VE','VN','VU','WS','YE','ZA',
+    'ZM','ZW'
+  ];
+  document.getElementById('flag-count-title').textContent = COUNTRY_CODES.length;
+
+  const COUNTRY_NAMES = {
+    AD:'Andorra', AE:'United Arab Emirates', AF:'Afghanistan', AG:'Antigua and Barbuda',
+    AL:'Albania', AM:'Armenia', AO:'Angola', AR:'Argentina', AT:'Austria', AU:'Australia',
+    AZ:'Azerbaijan', BA:'Bosnia and Herzegovina', BB:'Barbados', BD:'Bangladesh', BE:'Belgium',
+    BF:'Burkina Faso', BG:'Bulgaria', BH:'Bahrain', BI:'Burundi', BJ:'Benin', BN:'Brunei',
+    BO:'Bolivia', BR:'Brazil', BS:'Bahamas', BT:'Bhutan', BW:'Botswana', BY:'Belarus',
+    BZ:'Belize', CA:'Canada', CD:'DR Congo', CF:'Central African Republic', CG:'Congo',
+    CH:'Switzerland', CI:'Ivory Coast', CL:'Chile', CM:'Cameroon', CN:'China', CO:'Colombia',
+    CR:'Costa Rica', CU:'Cuba', CV:'Cabo Verde', CY:'Cyprus', CZ:'Czech Republic', DE:'Germany',
+    DJ:'Djibouti', DK:'Denmark', DM:'Dominica', DO:'Dominican Republic', DZ:'Algeria',
+    EC:'Ecuador', EE:'Estonia', EG:'Egypt', ER:'Eritrea', ES:'Spain', ET:'Ethiopia',
+    FI:'Finland', FJ:'Fiji', FM:'Micronesia', FR:'France', GA:'Gabon', GB:'United Kingdom',
+    GD:'Grenada', GE:'Georgia', GH:'Ghana', GM:'Gambia', GN:'Guinea', GQ:'Equatorial Guinea',
+    GR:'Greece', GT:'Guatemala', GW:'Guinea-Bissau', GY:'Guyana', HN:'Honduras', HR:'Croatia',
+    HT:'Haiti', HU:'Hungary', ID:'Indonesia', IE:'Ireland', IL:'Israel', IN:'India', IQ:'Iraq',
+    IR:'Iran', IS:'Iceland', IT:'Italy', JM:'Jamaica', JO:'Jordan', JP:'Japan', KE:'Kenya',
+    KG:'Kyrgyzstan', KH:'Cambodia', KI:'Kiribati', KM:'Comoros', KN:'Saint Kitts and Nevis',
+    KP:'North Korea', KR:'South Korea', KW:'Kuwait', KZ:'Kazakhstan', LA:'Laos', LB:'Lebanon',
+    LC:'Saint Lucia', LI:'Liechtenstein', LK:'Sri Lanka', LR:'Liberia', LS:'Lesotho',
+    LT:'Lithuania', LU:'Luxembourg', LV:'Latvia', LY:'Libya', MA:'Morocco', MC:'Monaco',
+    MD:'Moldova', ME:'Montenegro', MG:'Madagascar', MH:'Marshall Islands',
+    MK:'North Macedonia', ML:'Mali', MM:'Myanmar', MN:'Mongolia', MR:'Mauritania',
+    MT:'Malta', MU:'Mauritius', MV:'Maldives', MW:'Malawi', MX:'Mexico', MY:'Malaysia',
+    MZ:'Mozambique', NA:'Namibia', NE:'Niger', NG:'Nigeria', NI:'Nicaragua',
+    NL:'Netherlands', NO:'Norway', NP:'Nepal', NR:'Nauru', NZ:'New Zealand',
+    OM:'Oman', PA:'Panama', PE:'Peru', PG:'Papua New Guinea', PH:'Philippines', PK:'Pakistan',
+    PL:'Poland', PT:'Portugal', PW:'Palau', PY:'Paraguay', QA:'Qatar', RO:'Romania',
+    RS:'Serbia', RU:'Russia', RW:'Rwanda', SA:'Saudi Arabia', SB:'Solomon Islands',
+    SC:'Seychelles', SD:'Sudan', SE:'Sweden', SG:'Singapore', SI:'Slovenia', SK:'Slovakia',
+    SL:'Sierra Leone', SM:'San Marino', SN:'Senegal', SO:'Somalia', SR:'Suriname',
+    SS:'South Sudan', ST:'Sao Tome and Principe', SV:'El Salvador', SY:'Syria',
+    SZ:'Eswatini', TD:'Chad', TG:'Togo', TH:'Thailand', TJ:'Tajikistan',
+    TL:'Timor-Leste', TM:'Turkmenistan', TN:'Tunisia', TO:'Tonga', TR:'Turkey',
+    TT:'Trinidad and Tobago', TV:'Tuvalu', TZ:'Tanzania', UA:'Ukraine', UG:'Uganda',
+    US:'United States', UY:'Uruguay', UZ:'Uzbekistan', VA:'Vatican City',
+    VC:'Saint Vincent and the Grenadines', VE:'Venezuela', VN:'Vietnam', VU:'Vanuatu',
+    WS:'Samoa', YE:'Yemen', ZA:'South Africa', ZM:'Zambia', ZW:'Zimbabwe',
+  };
+
+  let FLAG_R = 19; // recomputed proportionally to ARENA_RADIUS — see resizeCanvas()
+
+  let flags = [];
+  let running = true;
+
+  function rand(min, max) { return min + Math.random() * (max - min); }
+  function norm(a) { while (a < 0) a += Math.PI * 2; while (a >= Math.PI * 2) a -= Math.PI * 2; return a; }
+  function angleDiff(a, b) { let d = norm(a - b); if (d > Math.PI) d = Math.PI * 2 - d; return d; }
+
+  function ringPositions(count, radius, itemR) {
+    const positions = [];
+    const spacing = itemR * 2 + 6;
+    let ring = 0;
+    while (positions.length < count) {
+      const ringRadius = spacing * 0.9 + ring * spacing;
+      if (ringRadius > radius - itemR) break;
+      const circumference = 2 * Math.PI * ringRadius;
+      const capacity = ring === 0 ? 1 : Math.max(1, Math.floor(circumference / spacing));
+      for (let i = 0; i < capacity && positions.length < count; i++) {
+        const a = (i / capacity) * Math.PI * 2 + ring * 0.3;
+        positions.push({ x: CENTER.x + Math.cos(a) * ringRadius, y: CENTER.y + Math.sin(a) * ringRadius });
+      }
+      ring++;
+    }
+    return positions;
+  }
+
+  let roundNumber = 0;
+  let roundStartTime = Date.now();
+
+  // ---- Tournament structure ----
+  // Each stage draws from a shrinking pool: one mini-battle produces one
+  // qualifier, that qualifier is set aside and removed from the pool, then
+  // another mini-battle runs with everyone else still in the pool — repeated
+  // until the stage's target number of qualifiers is reached. Then the next
+  // stage starts, using exactly those qualifiers as its new pool.
+  const STAGES = [
+    { label: 'QUALIFYING', target: 32 },
+    { label: 'ROUND OF 32', target: 16 },
+    { label: 'ROUND OF 16', target: 8 },
+    { label: 'QUARTERFINALS', target: 4 },
+    { label: 'SEMIFINALS', target: 2 },
+    { label: 'FINAL', target: 1 },
+  ];
+  let stageIndex = 0;
+  let stagePool = [];
+  let qualifiedThisStage = [];
+  let qualifiedDisplayList = []; // {code, idx} — drives the top "Qualified" panel
+  let qpRotationIndex = 0;
+
+  function currentStage() { return STAGES[stageIndex]; }
+
+  function updateQualifiedPanelTitle() {
+    const next = STAGES[stageIndex + 1];
+    document.getElementById('qp-title').textContent =
+      next ? ('Qualified for ' + next.label) : 'Crowning the champion';
+  }
+
+  function renderQualifiedList() {
+    const list = document.getElementById('qualified-list');
+    list.innerHTML = '';
+    const TOTAL_ROWS = 3;
+
+    // Cycle through the whole list in groups of 3, TV-credits style,
+    // instead of always pinning the most recent ones.
+    const chunks = [];
+    for (let i = 0; i < qualifiedDisplayList.length; i += TOTAL_ROWS) {
+      chunks.push(qualifiedDisplayList.slice(i, i + TOTAL_ROWS));
+    }
+    const current = chunks.length ? chunks[qpRotationIndex % chunks.length] : [];
+
+    for (let i = 0; i < TOTAL_ROWS - current.length; i++) {
+      const row = document.createElement('div');
+      row.className = 'qp-row';
+      list.appendChild(row); // empty placeholder — keeps the panel's height constant
+    }
+    current.forEach(entry => {
+      const row = document.createElement('div');
+      row.className = 'qp-row';
+
+      const idxEl = document.createElement('span');
+      idxEl.className = 'qp-index';
+      idxEl.textContent = '#' + entry.idx;
+
+      const flagCanvas = document.createElement('canvas');
+      flagCanvas.className = 'qp-flag-mini';
+      flagCanvas.width = 20; flagCanvas.height = 13;
+      flagCanvas.getContext('2d').drawImage(getFlagSprite(entry.code, designFor(entry.code)), 0, 0, 20, 13);
+
+      const nameEl = document.createElement('span');
+      nameEl.className = 'qp-country';
+      nameEl.textContent = COUNTRY_NAMES[entry.code] || entry.code;
+
+      const checkEl = document.createElement('span');
+      checkEl.className = 'qp-check';
+      checkEl.textContent = '✓ Qualified';
+
+      row.appendChild(idxEl);
+      row.appendChild(flagCanvas);
+      row.appendChild(nameEl);
+      row.appendChild(checkEl);
+      list.appendChild(row);
+    });
+  }
+
+  // Advance to the next group of 3 every few seconds, with a smooth
+  // slide/fade transition — like a news-ticker (burtieră) roll, not a
+  // hard cut.
+  function rotateQualifiedList() {
+    const list = document.getElementById('qualified-list');
+    list.style.transition = 'opacity 0.35s ease, transform 0.35s ease';
+    list.style.opacity = '0';
+    list.style.transform = 'translateY(-6px)';
+    setTimeout(() => {
+      qpRotationIndex++;
+      renderQualifiedList();
+      list.style.transition = 'none';
+      list.style.transform = 'translateY(6px)';
+      void list.offsetHeight; // force reflow so the next transition applies
+      list.style.transition = 'opacity 0.35s ease, transform 0.35s ease';
+      list.style.opacity = '1';
+      list.style.transform = 'translateY(0)';
+    }, 350);
+  }
+  setInterval(rotateQualifiedList, 3200);
+
+  function spawnFlags() {
+    flags = [];
+    eliminatedTrack.innerHTML = '';
+
+    const codes = stagePool.slice();
+    const positions = ringPositions(codes.length, ARENA_RADIUS, FLAG_R);
+
+    codes.forEach((code, i) => {
+      const pos = positions[i] || { x: CENTER.x, y: CENTER.y };
+      const speed = rand(2.5, 8); // intermediate pace, still varied
+      const dir = rand(0, Math.PI * 2);
+      flags.push({
+        code, design: designFor(code),
+        x: pos.x, y: pos.y, r: FLAG_R,
+        vx: Math.cos(dir) * speed, vy: Math.sin(dir) * speed,
+        alive: true,
+      });
+    });
+
+    roundNumber++;
+    roundStartTime = Date.now();
+    const stage = currentStage();
+    document.getElementById('round-number').textContent = 'BATTLE ' + roundNumber;
+    document.getElementById('round-phase').textContent =
+      stage.label + ' (' + qualifiedThisStage.length + '/' + stage.target + ')';
+    updateQualifiedPanelTitle();
+    renderQualifiedList();
+
+    updateHUD();
+    hideWinner();
+    hideStageAnnouncement();
+  }
+
+  function updateHUD() {
+    const alive = flags.filter(f => f.alive).length;
+    const total = flags.length || stagePool.length;
+    document.getElementById('count').textContent = alive;
+    document.getElementById('count-total').textContent = total;
+    document.getElementById('count-total-2').textContent = total;
+    document.getElementById('progress-fill').style.width = (total ? (alive / total * 100) : 100) + '%';
+
+    if (alive <= 1 && flags.length > 1) {
+      const survivor = flags.find(f => f.alive);
+      if (survivor) {
+        showWinner(survivor);
+        running = false;
+        spawnFireworksCelebration();
+        playQualifyChime();
+
+        const stage = currentStage();
+        qualifiedThisStage.push(survivor.code);
+        qualifiedDisplayList.push({ code: survivor.code, idx: qualifiedThisStage.length });
+        renderQualifiedList();
+        stagePool = stagePool.filter(c => c !== survivor.code);
+        document.getElementById('round-phase').textContent =
+          stage.label + ' (' + qualifiedThisStage.length + '/' + stage.target + ')';
+
+        if (qualifiedThisStage.length < stage.target) {
+          // Stage not done yet — same stage, smaller pool, one more mini-battle.
+          setTimeout(() => {
+            ARENA_RADIUS = computeArenaRadius(STAGE_W, STAGE_H);
+            running = true;
+            spawnFlags();
+          }, 3200);
+        } else if (stage.target === 1) {
+          // The FINAL just produced the overall tournament champion.
+          const championName = COUNTRY_NAMES[survivor.code] || survivor.code;
+          setTimeout(() => {
+            hideWinner();
+            showStageAnnouncement('CHAMPION!', championName);
+            playChampionFanfare();
+          }, 800);
+          setTimeout(() => { speakChampion(championName); }, 1600);
+          setTimeout(() => {
+            stageIndex = 0;
+            stagePool = COUNTRY_CODES.slice();
+            qualifiedThisStage = [];
+            qualifiedDisplayList = [];
+            qpRotationIndex = 0;
+            ARENA_RADIUS = computeArenaRadius(STAGE_W, STAGE_H);
+            running = true;
+            spawnFlags();
+          }, 6500);
+        } else {
+          // Stage complete — announce it, then advance to the next stage.
+          const justFinished = stage;
+          const nextStage = STAGES[stageIndex + 1];
+          setTimeout(() => {
+            hideWinner();
+            showStageAnnouncement(
+              justFinished.target + ' QUALIFIED',
+              'Advancing to ' + nextStage.label
+            );
+            playStageFanfare();
+          }, 800);
+          setTimeout(() => {
+            stageIndex++;
+            stagePool = qualifiedThisStage.slice();
+            qualifiedThisStage = [];
+            qualifiedDisplayList = [];
+            qpRotationIndex = 0;
+            ARENA_RADIUS = computeArenaRadius(STAGE_W, STAGE_H);
+            running = true;
+            spawnFlags();
+          }, 4800);
+        }
+      }
+    }
+  }
+
+  function showWinner(f) {
+    const stage = currentStage();
+    const label = stage.target === 1 ? 'Tournament champion' : 'Qualified — ' + stage.label;
+    document.getElementById('winner-label').textContent = label;
+    document.getElementById('winner-name').textContent = COUNTRY_NAMES[f.code] || f.code;
+    const wc = document.getElementById('winner-canvas');
+    const wctx = wc.getContext('2d');
+    wctx.clearRect(0, 0, wc.width, wc.height);
+    paintDesign(wctx, f.design, 0, 0, wc.width, wc.height);
+    document.getElementById('winner-banner').classList.add('show');
+  }
+  function hideWinner() {
+    document.getElementById('winner-banner').classList.remove('show');
+  }
+  function showStageAnnouncement(title, subtitle) {
+    document.getElementById('stage-announce-title').textContent = title;
+    document.getElementById('stage-announce-sub').textContent = subtitle;
+    document.getElementById('stage-announcement').classList.add('show');
+  }
+  function hideStageAnnouncement() {
+    document.getElementById('stage-announcement').classList.remove('show');
+  }
+
+  setInterval(() => {
+    const secs = Math.floor((Date.now() - roundStartTime) / 1000);
+    const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+    const ss = String(secs % 60).padStart(2, '0');
+    const t = document.getElementById('round-timer');
+    if (t) t.textContent = mm + ':' + ss;
+  }, 1000);
+
+  // ---- Flying elimination animation ----
+  // When a flag exits, it flies from its exit point to the eliminated bar,
+  // but the radius from the arena center only ever interpolates between two
+  // values that are BOTH >= ARENA_RADIUS — so by construction the path can
+  // never dip back inside the circle, no matter the angle involved.
+  let flyingEliminations = [];
+
+  function eliminate(f) {
+    if (!f.alive) return;
+    f.alive = false;
+    playWhoosh();
+    const dx = f.x - CENTER.x, dy = f.y - CENTER.y;
+    const startAngle = Math.atan2(dy, dx);
+    const startRadius = Math.max(ARENA_RADIUS + 4, Math.hypot(dx, dy));
+    const targetAngle = Math.PI / 2; // straight down — toward the bar below
+    const targetRadius = Math.max(ARENA_RADIUS + 40, (STAGE_H + 30) - CENTER.y);
+    flyingEliminations.push({
+      code: f.code, design: f.design,
+      startAngle, startRadius, targetAngle, targetRadius,
+      t0: performance.now(), duration: 650,
+    });
+    updateHUD();
+  }
+
+  function updateFlyingEliminations() {
+    const now = performance.now();
+    for (let i = flyingEliminations.length - 1; i >= 0; i--) {
+      const fe = flyingEliminations[i];
+      if (now - fe.t0 >= fe.duration) {
+        addEliminatedChip(fe);
+        flyingEliminations.splice(i, 1);
+      }
+    }
+  }
+
+  function renderFlyingEliminations() {
+    const now = performance.now();
+    flyingEliminations.forEach(fe => {
+      const raw = Math.min(1, (now - fe.t0) / fe.duration);
+      const t = 1 - Math.pow(1 - raw, 3); // ease-out
+      let da = fe.targetAngle - fe.startAngle;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      const angle = fe.startAngle + da * t;
+      const radius = fe.startRadius + (fe.targetRadius - fe.startRadius) * t;
+      const x = CENTER.x + Math.cos(angle) * radius;
+      const y = CENTER.y + Math.sin(angle) * radius;
+      const w = FLAG_R * 2.15 * (1 - 0.35 * t);
+      const h = FLAG_R * 1.4 * (1 - 0.35 * t);
+      ctx.save();
+      ctx.globalAlpha = 1 - 0.2 * t;
+      ctx.drawImage(getFlagSprite(fe.code, fe.design), x - w / 2, y - h / 2, w, h);
+      ctx.restore();
+    });
+  }
+
+  function addEliminatedChip(f) {
+    const chip = document.createElement('div');
+    chip.className = 'eliminated-item';
+    const swatch = document.createElement('div');
+    swatch.className = 'swatch';
+    extractSwatchColors(f.design).forEach(color => {
+      const d = document.createElement('div');
+      d.style.background = color;
+      swatch.appendChild(d);
+    });
+    const code = document.createElement('div');
+    code.className = 'code';
+    code.textContent = f.code;
+    chip.appendChild(swatch);
+    chip.appendChild(code);
+    eliminatedTrack.appendChild(chip);
+  }
+
+  // ---- Fireworks celebration (runs independently of the physics pause) ----
+  let fireworks = [];
+  const FIREWORK_COLORS = ['#e8b23d', '#c13f3f', '#4aa3ff', '#5b8c5a', '#f0ebd8'];
+  function spawnBurst(x, y) {
+    const count = 26;
+    for (let i = 0; i < count; i++) {
+      const angle = rand(0, Math.PI * 2);
+      const speed = rand(2.5, 8);
+      fireworks.push({
+        x, y,
+        vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+        life: 1, color: FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)],
+      });
+    }
+  }
+  function spawnFireworksCelebration() {
+    for (let i = 0; i < 6; i++) {
+      setTimeout(() => {
+        spawnBurst(rand(STAGE_W * 0.18, STAGE_W * 0.82), rand(STAGE_H * 0.15, STAGE_H * 0.55));
+      }, i * 320);
+    }
+  }
+  function updateFireworks() {
+    for (let i = fireworks.length - 1; i >= 0; i--) {
+      const p = fireworks[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.05; p.life -= 0.018;
+      if (p.life <= 0) fireworks.splice(i, 1);
+    }
+  }
+  function renderFireworks() {
+    fireworks.forEach(p => {
+      ctx.globalAlpha = Math.max(p.life, 0);
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 3.2, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  function step() {
+    GATES[0].angle = norm(GATES[0].angle + GATE_SPIN);
+    BLOCKER.angle = norm(BLOCKER.angle + BLOCKER.speed);
+
+    const alive = flags.filter(f => f.alive);
+
+    alive.forEach(f => { f.x += f.vx; f.y += f.vy; });
+
+    for (let i = 0; i < alive.length; i++) {
+      for (let j = i + 1; j < alive.length; j++) {
+        const a = alive[i], b = alive[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const dist = Math.hypot(dx, dy);
+        const minDist = a.r + b.r;
+        if (dist < minDist && dist > 0) {
+          const overlap = (minDist - dist) / 2;
+          const nx = dx / dist, ny = dy / dist;
+          a.x -= nx * overlap; a.y -= ny * overlap;
+          b.x += nx * overlap; b.y += ny * overlap;
+
+          const rvx = b.vx - a.vx, rvy = b.vy - a.vy;
+          const velAlongNormal = rvx * nx + rvy * ny;
+          if (velAlongNormal < 0) {
+            // Equal mass, restitution 1: exchange the full normal-velocity
+            // component. (No extra 0.5 factor — that previously drained
+            // energy on every hit and made everything grind to a crawl.)
+            const impulse = -velAlongNormal;
+            a.vx -= impulse * nx; a.vy -= impulse * ny;
+            b.vx += impulse * nx; b.vy += impulse * ny;
+          }
+        }
+      }
+    }
+
+    alive.forEach(f => {
+      const dx = f.x - CENTER.x, dy = f.y - CENTER.y;
+      const dist = Math.hypot(dx, dy);
+      const limit = ARENA_RADIUS - f.r;
+      if (dist <= limit) return;
+
+      const posAngle = Math.atan2(dy, dx);
+      const blocked = angleDiff(posAngle, BLOCKER.angle) < BLOCKER.half;
+      const inGate = !blocked && GATES.some(g => angleDiff(posAngle, g.angle) < g.half);
+
+      if (inGate) {
+        if (dist > ARENA_RADIUS + f.r * 1.4) eliminate(f);
+        return;
+      }
+
+      const nx = dx / dist, ny = dy / dist;
+      const overshoot = dist - limit;
+      f.x -= nx * overshoot;
+      f.y -= ny * overshoot;
+      const vDotN = f.vx * nx + f.vy * ny;
+      f.vx -= 2 * vDotN * nx;
+      f.vy -= 2 * vDotN * ny;
+      if (Math.abs(vDotN) > 1) playThump();
+    });
+
+    // Safety net only — nudge up to a randomized target instead of a fixed
+    // value, so slow flags don't all clump at exactly the same speed. Real
+    // variety mostly comes from the elastic collisions themselves (some
+    // flags stay fast, some stay slow, depending on how they've been hit).
+    const MIN_SPEED = 1.2;
+    alive.forEach(f => {
+      const speed = Math.hypot(f.vx, f.vy);
+      if (speed < MIN_SPEED) {
+        const dir = speed > 0.0001 ? Math.atan2(f.vy, f.vx) : rand(0, Math.PI * 2);
+        const target = rand(MIN_SPEED, MIN_SPEED * 3.5);
+        f.vx = Math.cos(dir) * target;
+        f.vy = Math.sin(dir) * target;
+      }
+    });
+  }
+
+  // ---- Vector flag rendering (no fonts, no images — just fast fillRect) ----
+  // paintDesign draws into an absolute box (x0,y0,w,h) on any given context,
+  // so the same code renders flags in the arena AND the winner's showcase.
+  function paintDesign(c, d, x0, y0, w, h) {
+    const cx = x0 + w / 2, cy = y0 + h / 2;
+    switch (d.type) {
+      case 'h3': {
+        const sh = h / 3;
+        d.c.forEach((color, i) => { c.fillStyle = color; c.fillRect(x0, y0 + i * sh, w, sh + 0.5); });
+        break;
+      }
+      case 'v3': {
+        const sw = w / 3;
+        d.c.forEach((color, i) => { c.fillStyle = color; c.fillRect(x0 + i * sw, y0, sw + 0.5, h); });
+        break;
+      }
+      case 'h2': {
+        const sh = h / 2;
+        d.c.forEach((color, i) => { c.fillStyle = color; c.fillRect(x0, y0 + i * sh, w, sh + 0.5); });
+        break;
+      }
+      case 'v2': {
+        const sw = w / 2;
+        d.c.forEach((color, i) => { c.fillStyle = color; c.fillRect(x0 + i * sw, y0, sw + 0.5, h); });
+        break;
+      }
+      case 'quarters': {
+        const hw = w / 2, hh = h / 2;
+        c.fillStyle = d.c[0]; c.fillRect(x0, y0, hw, hh);
+        c.fillStyle = d.c[1]; c.fillRect(x0 + hw, y0, hw, hh);
+        c.fillStyle = d.c[2]; c.fillRect(x0, y0 + hh, hw, hh);
+        c.fillStyle = d.c[3]; c.fillRect(x0 + hw, y0 + hh, hw, hh);
+        break;
+      }
+      case 'cross': {
+        c.fillStyle = d.field; c.fillRect(x0, y0, w, h);
+        c.fillStyle = d.cross;
+        c.fillRect(x0, cy - h * 0.16, w, h * 0.32);
+        c.fillRect(cx - w * 0.14, y0, w * 0.28, h);
+        break;
+      }
+      case 'cross2': {
+        c.fillStyle = d.field; c.fillRect(x0, y0, w, h);
+        c.fillStyle = d.border;
+        c.fillRect(x0, cy - h * 0.2, w, h * 0.4);
+        c.fillRect(cx - w * 0.18, y0, w * 0.36, h);
+        c.fillStyle = d.inner;
+        c.fillRect(x0, cy - h * 0.09, w, h * 0.18);
+        c.fillRect(cx - w * 0.08, y0, w * 0.16, h);
+        break;
+      }
+      case 'circle': {
+        c.fillStyle = d.bg; c.fillRect(x0, y0, w, h);
+        c.fillStyle = d.dot;
+        c.beginPath(); c.arc(cx, cy, h * 0.32, 0, Math.PI * 2); c.fill();
+        break;
+      }
+      case 'canton': {
+        const sh = h / 5;
+        for (let i = 0; i < 5; i++) { c.fillStyle = d.stripe[i % 2]; c.fillRect(x0, y0 + i * sh, w, sh + 0.5); }
+        c.fillStyle = d.canton; c.fillRect(x0, y0, w * 0.42, h * 0.55);
+        break;
+      }
+      case 'diamond': {
+        c.fillStyle = d.field; c.fillRect(x0, y0, w, h);
+        c.fillStyle = d.diamond;
+        c.beginPath();
+        c.moveTo(cx, y0 + h * 0.1); c.lineTo(x0 + w * 0.85, cy); c.lineTo(cx, y0 + h * 0.9); c.lineTo(x0 + w * 0.15, cy);
+        c.closePath(); c.fill();
+        c.fillStyle = d.circle;
+        c.beginPath(); c.arc(cx, cy, h * 0.2, 0, Math.PI * 2); c.fill();
+        break;
+      }
+      case 'field': {
+        c.fillStyle = d.c; c.fillRect(x0, y0, w, h);
+        if (d.accent) { c.fillStyle = d.accent; c.fillRect(x0 + 2, y0 + 2, w * 0.3, h * 0.3); }
+        break;
+      }
+      default: {
+        c.fillStyle = '#888'; c.fillRect(x0, y0, w, h);
+      }
+    }
+  }
+
+  // Pre-render each flag design once onto a tiny offscreen canvas, then
+  // just drawImage() it every frame. drawImage of a small bitmap is far
+  // cheaper than re-running several fillRect calls per flag per frame —
+  // this was the biggest remaining cost with 80-178 flags on screen.
+  const FLAG_SPRITE_CACHE = new Map();
+  function getFlagSprite(code, design) {
+    let sprite = FLAG_SPRITE_CACHE.get(code);
+    if (sprite) return sprite;
+    const sw = 64, sh = 40;
+    const off = document.createElement('canvas');
+    off.width = sw; off.height = sh;
+    paintDesign(off.getContext('2d'), design, 0, 0, sw, sh);
+    FLAG_SPRITE_CACHE.set(code, off);
+    return off;
+  }
+
+  function drawFlagShape(f) {
+    const w = f.r * 2.15, h = f.r * 1.4;
+    const x0 = f.x - w / 2, y0 = f.y - h / 2;
+    ctx.drawImage(getFlagSprite(f.code, f.design), x0, y0, w, h);
+    ctx.strokeStyle = 'rgba(240,235,216,0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x0, y0, w, h);
+  }
+
+  function drawArena() {
+    // Faint neutral ring so the arena boundary stays visible, with a real
+    // gap cut at the gate window — drawn as a native arc() with exact
+    // floating-point angles (no discretized sampling), so the gap slides
+    // perfectly smoothly instead of "snapping" between fixed steps.
+    const gates = GATES.map(g => ({ start: norm(g.angle - g.half), end: norm(g.angle + g.half) }))
+                        .sort((a, b) => a.start - b.start);
+    ctx.beginPath();
+    for (let i = 0; i < gates.length; i++) {
+      const cur = gates[i];
+      const next = gates[(i + 1) % gates.length];
+      let segStart = cur.end;
+      let segEnd = next.start;
+      if (segEnd <= segStart) segEnd += Math.PI * 2;
+      const x0 = CENTER.x + Math.cos(segStart) * ARENA_RADIUS;
+      const y0 = CENTER.y + Math.sin(segStart) * ARENA_RADIUS;
+      ctx.moveTo(x0, y0);
+      ctx.arc(CENTER.x, CENTER.y, ARENA_RADIUS, segStart, segEnd);
+    }
+    ctx.strokeStyle = 'rgba(240,235,216,0.28)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Rotating blue shield: drawn as a thin arc segment along the ring
+    // radius. Wherever it currently sits, it visually plugs the gap
+    // (and physically blocks it too — see step()).
+    ctx.save();
+    ctx.shadowColor = 'rgba(74,163,255,0.55)';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(CENTER.x, CENTER.y, ARENA_RADIUS, BLOCKER.angle - BLOCKER.half, BLOCKER.angle + BLOCKER.half);
+    ctx.strokeStyle = '#4aa3ff';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, STAGE_W, STAGE_H);
+    drawArena();
+    flags.forEach(f => { if (f.alive) drawFlagShape(f); });
+    renderFlyingEliminations();
+    renderFireworks();
+  }
+
+  function loop() {
+    if (running) step();
+    updateFlyingEliminations();
+    updateFireworks();
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  function computeArenaRadius(w, h) {
+    const r = Math.min(w, h) * 0.4 - 16;
+    return Math.max(60, Math.min(380, r));
+  }
+
+  let _lastStageW = -1, _lastStageH = -1;
+  function resizeCanvas() {
+    const bodyRect = document.body.getBoundingClientRect();
+    const topReserve = headerBar.getBoundingClientRect().height
+      + qualifiedPanel.getBoundingClientRect().height
+      + roundInfo.getBoundingClientRect().height;
+    const bottomFixed = progressSection.getBoundingClientRect().height
+      + footerBar.getBoundingClientRect().height
+      + eliminatedBarEl.getBoundingClientRect().height; // now a fixed 90px, always scrollable
+    const newW = Math.max(1, Math.round(bodyRect.width));
+    const newH = Math.max(100, Math.round(bodyRect.height - topReserve - bottomFixed));
+    // Skip the reset entirely when nothing actually changed — resetting
+    // canvas.width/height clears and reallocates the backing buffer, which
+    // is expensive and was firing far more often than needed, contributing
+    // to the stutter.
+    if (newW === _lastStageW && newH === _lastStageH) return;
+    _lastStageW = newW; _lastStageH = newH;
+    STAGE_W = newW;
+    STAGE_H = newH;
+    canvas.width = STAGE_W;
+    canvas.height = STAGE_H;
+    ARENA_RADIUS = computeArenaRadius(STAGE_W, STAGE_H);
+    FLAG_R = Math.max(7, Math.min(19, ARENA_RADIUS / 24));
+    CENTER = { x: STAGE_W / 2, y: STAGE_H / 2 };
+  }
+
+  // Observe the whole page, not arena-wrap — arena-wrap's own box shrinks
+  // as the eliminated-bar grows, which would otherwise shrink the arena
+  // mid-round. The body only truly changes size on a real window resize.
+  if (window.ResizeObserver) {
+    new ResizeObserver(resizeCanvas).observe(document.body);
+  } else {
+    window.addEventListener('resize', resizeCanvas);
+  }
+  resizeCanvas();
+
+  document.getElementById('btn-reset').addEventListener('click', () => {
+    // Resets the ENTIRE tournament back to the qualifying stage, not just
+    // the current mini-battle.
+    stageIndex = 0;
+    stagePool = COUNTRY_CODES.slice();
+    qualifiedThisStage = [];
+    qualifiedDisplayList = [];
+    qpRotationIndex = 0;
+    ARENA_RADIUS = computeArenaRadius(STAGE_W, STAGE_H);
+    running = true;
+    spawnFlags();
+  });
+  document.getElementById('btn-shrink').addEventListener('click', () => {
+    ARENA_RADIUS = Math.max(180, ARENA_RADIUS - 50);
+  });
+  document.getElementById('btn-sound').addEventListener('click', (e) => {
+    soundEnabled = !soundEnabled;
+    e.target.textContent = 'Sound: ' + (soundEnabled ? 'On' : 'Off');
+    ensureAudio();
+    startCrowdAmbience();
+    if (ambienceGain) ambienceGain.gain.value = soundEnabled ? 0.05 : 0;
+    if (!soundEnabled && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+  });
+  // Any first click on the controls satisfies the browser's autoplay
+  // gesture requirement and starts the crowd ambience — also "warms up"
+  // speech synthesis (a silent utterance) so the champion announcement
+  // isn't the very first thing that engine has to do.
+  document.querySelector('.controls').addEventListener('click', () => {
+    ensureAudio();
+    startCrowdAmbience();
+    if ('speechSynthesis' in window) {
+      try {
+        const warm = new SpeechSynthesisUtterance(' ');
+        warm.volume = 0;
+        window.speechSynthesis.speak(warm);
+      } catch (e) { /* ignore */ }
+    }
+  }, { once: true });
+
+  stagePool = COUNTRY_CODES.slice();
+  spawnFlags();
+  loop();
+})();
+</script>
+</body>
+</html>
