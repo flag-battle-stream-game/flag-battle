@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+.env.local
+.env.*.local
+server/node_modules
+public/flags
+token-github.txt
